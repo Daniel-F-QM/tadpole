@@ -20,17 +20,35 @@ showing the reconstruction live.
 Needs Python 3.13 from python.org (not Anaconda) and Julia ≥ 1.10 on `PATH`
 (juliaup is fine; set `TADPOLE_JULIA` to use a specific binary).
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\setup_env.ps1
-```
+Run these from the repository root:
 
-That script does four things:
-1. creates `.venv`
-2. installs `requirements.txt` and `requirements-dev.txt`
-3. instantiates the Julia package
-4. builds juliacall's environment in `julia/env`
+1. Create the virtual environment and install the Python packages:
 
-The first run takes a few minutes, because Julia precompiles everything.
+   ```powershell
+   py -3.13 -m venv .venv
+   .venv\Scripts\python -m pip install -r requirements.txt
+   .venv\Scripts\python -m pip install -r requirements-dev.txt   # tests only
+   ```
+
+2. Install and precompile the Julia package's dependencies:
+
+   ```powershell
+   julia --project=julia/TadpoleRetrieval -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"
+   ```
+
+3. Build juliacall's environment in `julia/env`. It contains PythonCall plus a
+   link to `julia/TadpoleRetrieval`.
+
+   ```powershell
+   .venv\Scripts\python scripts\setup_julia.py
+   ```
+
+   This takes a few minutes the first time, because Julia precompiles
+   everything. If you skip it, the app does the same thing on its first
+   start, and the engine lamp stays amber until it is done.
+
+Repeat step 2 after changing the Julia package's dependencies, and step 3
+after moving the repository: `julia/env` stores absolute paths.
 
 ## Run
 

@@ -7,7 +7,6 @@ main.py                     launcher (python main.py [trace.dwc])
 Tadpole.spec                PyInstaller recipe (one-folder exe + Julia bundle)
 requirements*.txt           pinned Python deps (runtime / tests)
 scripts/
-  setup_env.ps1             dev setup: venv, Julia package, juliacall env
   setup_julia.py            builds julia/env (juliacall's environment)
   build_julia_bundle.py     self-contained Julia runtime+depot+env for the exe
   build_sysimage.jl         PackageCompiler sysimage for that bundle
