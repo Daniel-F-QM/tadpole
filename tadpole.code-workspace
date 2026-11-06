@@ -1,0 +1,114 @@
+{
+    "folders": [
+        { "name": "Tadpole", "path": "." }
+    ],
+    "settings": {
+        // Python: the project venv, tests via pytest
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+        "python.terminal.activateEnvironment": true,
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": ["tests"],
+
+        // Julia: the language server and REPL use the retrieval package's env
+        "julia.environmentPath": "${workspaceFolder}/julia/TadpoleRetrieval",
+
+        // Keep the venv, build output and the 2 GB Julia bundle out of
+        // search, file watching and the explorer. Indexing them is slow and
+        // can lock files while a build is running.
+        "files.exclude": {
+            "**/__pycache__": true,
+            "**/.pytest_cache": true
+        },
+        "search.exclude": {
+            ".venv": true,
+            "build": true,
+            "dist": true,
+            "julia/env": true
+        },
+        "files.watcherExclude": {
+            "**/.venv/**": true,
+            "**/build/**": true,
+            "**/dist/**": true,
+            "**/julia/env/**": true
+        },
+
+        "files.trimTrailingWhitespace": true,
+        "files.insertFinalNewline": true,
+        "[python]": { "editor.rulers": [88] },
+        "[julia]": { "editor.rulers": [92] }
+    },
+    "launch": {
+        "version": "0.2.0",
+        "configurations": [
+            {
+                "name": "Tadpole",
+                "type": "debugpy",
+                "request": "launch",
+                "program": "${workspaceFolder}/main.py",
+                "cwd": "${workspaceFolder}",
+                "console": "integratedTerminal",
+                "justMyCode": true
+            },
+            {
+                "name": "Tadpole (without Julia)",
+                "type": "debugpy",
+                "request": "launch",
+                "program": "${workspaceFolder}/main.py",
+                "cwd": "${workspaceFolder}",
+                "console": "integratedTerminal",
+                "env": { "TADPOLE_NO_ENGINE": "1" },
+                "justMyCode": true
+            },
+            {
+                "name": "Tadpole: open a .dwc file",
+                "type": "debugpy",
+                "request": "launch",
+                "program": "${workspaceFolder}/main.py",
+                "args": ["${input:dwcPath}"],
+                "cwd": "${workspaceFolder}",
+                "console": "integratedTerminal",
+                "justMyCode": true
+            }
+        ],
+        "inputs": [
+            {
+                "id": "dwcPath",
+                "type": "promptString",
+                "description": "Full path to the .dwc file"
+            }
+        ]
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "Python tests",
+                "type": "shell",
+                "command": "${workspaceFolder}/.venv/Scripts/python.exe -m pytest",
+                "group": { "kind": "test", "isDefault": true },
+                "problemMatcher": []
+            },
+            {
+                "label": "Julia tests",
+                "type": "shell",
+                "command": "julia --project=julia/TadpoleRetrieval -e \"using Pkg; Pkg.test()\"",
+                "group": "test",
+                "problemMatcher": []
+            },
+            {
+                "label": "Rebuild juliacall environment",
+                "type": "shell",
+                "command": "${workspaceFolder}/.venv/Scripts/python.exe scripts/setup_julia.py",
+                "problemMatcher": []
+            }
+        ]
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.debugpy",
+            "julialang.language-julia"
+        ]
+    }
+}
