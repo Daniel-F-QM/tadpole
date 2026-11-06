@@ -1,0 +1,9 @@
+{
+    "packages": {
+        "TadpoleRetrieval": {
+            "uuid": "8f2b6d4e-3c1a-4e7b-9a5d-2f6c8e1b7a43",
+            "path": "../julia/TadpoleRetrieval",
+            "dev": true
+        }
+    }
+}

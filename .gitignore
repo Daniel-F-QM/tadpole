@@ -1,0 +1,41 @@
+# Virtual environment
+.venv/
+
+# PyInstaller build artifacts
+build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Test artifacts
+.pytest_cache/
+
+# Measurement / result data — belongs in a data store, not in git
+*.dwc
+*.npz
+data/
+# …except small test fixtures
+!tests/fixtures/*
+
+# Julia: compiled system images and a local depot used for packaging
+*.so
+*.dll
+*.dylib
+julia/depot/
+julia/sysimage/
+
+# Runtime preferences, written next to the program (see SETTINGS_PATH)
+settings.json
+settings.json.tmp
+
+# Editors / OS
+.idea/
+Thumbs.db
+desktop.ini
+
+# juliacall environment: machine-specific absolute paths, rebuilt by
+# scripts/setup_julia.py
+julia/env/

@@ -1,0 +1,27 @@
+# Tool configuration only — deliberately no [project] or [build-system] table.
+#
+# Tadpole is never pip-installed: it is run from the repository and frozen from
+# the repository by Tadpole.spec. Adding packaging metadata would give the
+# frozen build a second opinion about where the source lives, and an editable
+# install would put a second copy on sys.path that PyInstaller might resolve
+# instead of this one.
+#
+# pythonpath = ["."] is what makes `import tadpole` work in
+# the tests with no install step.
+#
+# Dev dependencies live in requirements-dev.txt, NOT requirements.txt —
+# see that file's header for why the build lockfile stays untouched.
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+
+# Tests run offscreen. Only the engine tests start Julia; they get a longer
+# per-test timeout via a marker-free explicit pytest.mark.timeout.
+timeout = 120
+
+filterwarnings = [
+    "error::DeprecationWarning",
+]

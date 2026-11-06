@@ -1,0 +1,44 @@
+# Tadpole runtime lockfile — Python 3.13 (python.org, not Anaconda).
+#
+#     py -3.13 -m venv .venv
+#     .venv\Scripts\python -m pip install -r requirements.txt
+#     .venv\Scripts\python -m pip install -r requirements-dev.txt
+#     .venv\Scripts\python scripts\setup_julia.py
+#
+# or just run scripts\setup_env.ps1, which does all four.
+#
+# Unlike Lillypad's lockfile this one needs no --no-deps: nothing here drags
+# in a second Qt binding. juliacall/juliapkg do not install Julia themselves
+# here — tadpole.paths always names the Julia to use (see setup_julia.py).
+#
+# Dev-only packages (pytest…) live in requirements-dev.txt.
+
+altgraph==0.17.5
+colorama==0.4.6
+contourpy==1.4.0
+cycler==0.12.1
+filelock==4.2.9
+fonttools==4.68.0
+juliacall==0.9.37
+juliapkg==0.1.28
+kiwisolver==1.5.1
+matplotlib==3.11.1
+numpy==2.4.6
+packaging==26.3
+pefile==2024.8.26
+pillow==13.0.0
+pyinstaller==6.21.0
+pyinstaller-hooks-contrib==2026.9
+pyparsing==3.3.3
+PySide6==6.11.1
+PySide6_Addons==6.11.1
+PySide6_Essentials==6.11.1
+python-dateutil==4.0.0
+pywin32-ctypes==0.2.3
+scipy==1.18.0
+semver==3.1.0
+setuptools==84.2.1
+shiboken6==6.11.1
+tomli==2.5.0
+tomlkit==0.15.2
+tzdata==2026.6
