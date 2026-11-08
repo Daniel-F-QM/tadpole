@@ -27,7 +27,7 @@ def test_design_never_imports_gui():
 
 
 def test_core_layers_have_no_qt():
-    for sub in ("prep", "io", "engine"):
+    for sub in ("prep", "io", "engine", "propagation"):
         for f in files(sub):
             bad = [m for m in imports_of(f) if m.startswith(("PySide6", "matplotlib"))]
             assert not bad, (f, bad)

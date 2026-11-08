@@ -11,7 +11,7 @@ from __future__ import annotations
 from PySide6.QtCore import QLocale, QPointF, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFrame, QLabel,
-                               QSlider, QSpinBox, QWidget)
+                               QLineEdit, QSlider, QSpinBox, QWidget)
 
 from tadpole.design.tokens import PALETTE
 
@@ -42,7 +42,21 @@ class _DotDecimal:
 
 class SpinBox(_NoWheel, _DotDecimal, QSpinBox):             pass
 class DoubleSpinBox(_NoWheel, _DotDecimal, QDoubleSpinBox): pass
-class ComboBox(_NoWheel, QComboBox):                       pass
+class ComboBox(_NoWheel, QComboBox):
+    """Sized by the panel, not by its longest item: the fixed-width side
+    column clips anything wider. The open list still shows full names."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(6)
+        self.view().setTextElideMode(Qt.ElideNone)
+
+    def showPopup(self):
+        # the list may be wider than the box, so long names stay readable
+        self.view().setMinimumWidth(self.view().sizeHintForColumn(0) + 24)
+        super().showPopup()
+
+
 class Slider(_NoWheel, QSlider):                           pass
 
 
@@ -119,3 +133,99 @@ class StatusLamp(QWidget):
         p.setBrush(color)
         p.drawEllipse(QPointF(cx, cy), r, r)
         p.end()
+
+
+class AxisBoundEditor(QLineEdit):
+    """The box that opens over an axis' end tick label when it is clicked
+    (Lillypad's). A child of the canvas, so it sits on top of the plot.
+
+    Return commits, Escape or clicking away cancels: a half-typed number that
+    is abandoned should never land on an axis.
+    """
+    PAD = 10
+    MIN_W = 56
+
+    def __init__(self, canvas):
+        super().__init__(canvas)
+        self._canvas = canvas
+        self._target = None       # (ax, "x"|"y", "lo"|"hi") while open
+        self.setAlignment(Qt.AlignCenter)
+        self.hide()
+        self.returnPressed.connect(self._commit)
+        self.editingFinished.connect(self.cancel)
+
+    def open_on(self, ax, which, end, value, rect):
+        self._target = (ax, which, end)
+        # %g, not the tick's rounded label, so "nudge the max" moves nothing else
+        self.setText(f"{value:g}")
+        w = max(rect.width() + self.PAD, self.MIN_W)
+        self.setGeometry(rect.center().x() - w // 2, rect.top() - 2,
+                         w, rect.height() + 6)
+        self.show()
+        self.raise_()
+        self.setFocus(Qt.OtherFocusReason)
+        self.selectAll()
+
+    def cancel(self):
+        self._target = None
+        self.hide()
+
+    def _commit(self):
+        if self._target is None:
+            return
+        ax, which, end = self._target
+        text = self.text().strip()
+        # cleared first: applying redraws, which can re-enter through cancel()
+        self._target = None
+        self.hide()
+        try:
+            value = float(text)
+        except ValueError:
+            hint = " Use '.' for decimals." if "," in text else ""
+            self._canvas.message.emit(f"{text!r} is not a number — axis unchanged.{hint}")
+            return
+        self._canvas.apply_axis_bound(ax, which, end, value)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.cancel()
+            return
+        super().keyPressEvent(event)
+
+
+class ElidedLabel(QLabel):
+    """One line that shortens itself with "…" to the width it is given; the
+    full text is in the tooltip. For file names and the like in the fixed-
+    width side panel, which must neither wrap onto more lines nor widen it."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._full = ""
+        self.setMinimumWidth(20)
+        self.setText(text)
+
+    def setText(self, text):
+        self._full = str(text)
+        self.setToolTip(self._full)
+        self._elide()
+
+    def text(self):
+        return self._full
+
+    def _elide(self):
+        w = max(self.width(), 20)
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideMiddle, w))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._elide()
+
+    def minimumSizeHint(self):
+        h = super().minimumSizeHint()
+        h.setWidth(20)
+        return h
+
+    def sizeHint(self):
+        h = super().sizeHint()
+        h.setWidth(min(h.width(), 200))
+        return h

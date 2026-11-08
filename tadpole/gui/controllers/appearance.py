@@ -23,7 +23,7 @@ class AppearanceController:
         self._refresh_icons()
 
     def canvases(self):
-        return (self.win.prep_canvas, self.win.recon_canvas)
+        return self.win.canvases()
 
     def toggle_theme(self):
         self.theme = "light" if self.theme == "dark" else "dark"
@@ -52,7 +52,7 @@ class AppearanceController:
 
     def save_picture(self):
         canvas = self.win.current_canvas()
-        page = "prepare" if canvas is self.win.prep_canvas else "reconstruct"
+        page = self.win.current_page_name()
         stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
         start = str(Path(self.win.settings_ctl.last_dir()) / f"tadpole_{page}_{stamp}.png")
         path, _ = QFileDialog.getSaveFileName(self.win, "Save picture", start,

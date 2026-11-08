@@ -13,10 +13,11 @@ from pathlib import Path
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from tadpole.analysis import pulse_views
 from tadpole.engine.client import EngineClient
 from tadpole.engine.protocol import NOT_IMPLEMENTED, Done, Error, Log, Snapshot
 from tadpole.gui.window.build_ui import ALGORITHM_NOTES
-from tadpole.io.prepared import load_prepared, save_result
+from tadpole.io.prepared import PulseSource, load_prepared, save_result
 
 POLL_MS = 60
 
@@ -40,6 +41,9 @@ class ReconController:
         win.btn_stop.clicked.connect(self.stop)
         win.btn_load_prep.clicked.connect(self.load_dialog)
         win.btn_save_result.clicked.connect(self.save_dialog)
+        win.btn_save_analysis.clicked.connect(self.save_dialog)
+        win.btn_recon_adv.clicked.connect(
+            lambda: win.dlg_recon_adv.show_near(win.btn_recon_adv))
         win.cmb_alg.currentIndexChanged.connect(self._algorithm_changed)
         self._algorithm_changed()
         self._last_state = None
@@ -72,6 +76,7 @@ class ReconController:
             f"{prepared.delays_meas_fs.size} measured delays")
         w.recon_canvas.set_prepared(prepared)
         w.lbl_result.setText("No result yet")
+        self._clear_analysis()
         self._update_buttons()
 
     def load_dialog(self):
@@ -105,7 +110,7 @@ class ReconController:
 
     def _algorithm_changed(self, *_):
         alg = self.algorithm()
-        self.win.lbl_alg_note.setText(ALGORITHM_NOTES.get(alg, ""))
+        self.win.cmb_alg.setToolTip(ALGORITHM_NOTES.get(alg, ""))
         for lbl, wdg in self.win.ptycho_rows:
             lbl.setVisible(alg == "ptychographic")
             wdg.setVisible(alg == "ptychographic")
@@ -128,7 +133,7 @@ class ReconController:
         self._t_start = time.perf_counter()
         w.recon_canvas.reset_progress()
         w.progress.setValue(0)
-        w.lbl_G.setText("—"); w.lbl_Gp.setText("—"); w.lbl_iter.setText("—")
+        w.lbl_progress.setText("starting…")
         w.lbl_result.setObjectName("dim")
         w.lbl_result.setText(f"Running {alg.upper()}…")
         w.lbl_result.style().polish(w.lbl_result)
@@ -151,10 +156,9 @@ class ReconController:
 
     def _on_snapshot(self, s: Snapshot):
         w = self.win
-        w.lbl_G.setText(f"{s.G:.3e}")
-        w.lbl_Gp.setText(f"{s.Gp:.3e}")
-        w.lbl_iter.setText(f"{s.iteration}  ({time.perf_counter() - self._t_start:.1f} s)")
         w.progress.setValue(int(100 * min(1.0, s.iteration / self._max_iter)))
+        w.lbl_progress.setText(f"iter {s.iteration} / {self._max_iter}  ·  "
+                             f"{time.perf_counter() - self._t_start:.1f} s")
         w.recon_canvas.show_progress(s.iteration, s.G, s.Gp, s.trace, s.E)
 
     def _on_done(self, d: Done):
@@ -162,10 +166,9 @@ class ReconController:
         r = d.result
         w.state.result = r
         w.recon_canvas.show_result(r)
-        w.lbl_G.setText(f"{r['G']:.3e}")
-        w.lbl_Gp.setText(f"{r['Gp']:.3e}")
-        w.lbl_iter.setText(f"{r['iterations']}  ({r['elapsed_s']:.1f} s)")
         w.progress.setValue(100)
+        w.lbl_progress.setText(f"done: {r['iterations']} iterations  ·  "
+                             f"{r['elapsed_s']:.1f} s")
         why = {"tolerance": "reached tolerance", "max_iter": "hit max iterations",
                "user": "stopped"}.get(r["stopped"], r["stopped"])
         w.lbl_result.setObjectName("dim")
@@ -173,7 +176,34 @@ class ReconController:
                              f"{r['iterations']} iterations. Best G = {r['G']:.3e}, "
                              f"G′ = {r['Gp']:.3e}.")
         w.lbl_result.style().polish(w.lbl_result)
+        self._show_analysis(r, why)
         self._update_buttons()
+
+    # ── analysis page ────────────────────────────────────────────────────
+    def _show_analysis(self, r, why):
+        w = self.win
+        p = w.state.recon_input
+        w.analysis_canvas.set_result(p, r)
+        lines = [f"{r['algorithm'].upper()}, {why}",
+                 f"{r['iterations']} iterations, {r['elapsed_s']:.1f} s",
+                 f"G  = {r['G']:.3e}", f"G′ = {r['Gp']:.3e}"]
+        try:
+            v = pulse_views(r["E"], p.t_fs, p.w_rad_fs, p.w0_rad_fs)
+            lines += [f"FWHM {v['fwhm_t']:.1f} fs", f"FWHM {v['fwhm_w']:.3f} rad/fs",
+                      f"λ₀ {v['lambda0_nm']:.0f} nm"]
+        except (KeyError, ValueError, AttributeError):
+            pass
+        w.lbl_analysis.setText("\n".join(lines))
+        w.btn_mode_analysis.setEnabled(True)
+        w.propagator.set_pulse(PulseSource.from_result(p, r))
+
+    def _clear_analysis(self):
+        w = self.win
+        w.analysis_canvas.clear()
+        w.lbl_analysis.setText("No result yet")
+        w.btn_mode_analysis.setEnabled(False)
+        if w.stack.currentIndex() == 2:
+            w.set_mode(1)
 
     def _on_error(self, e: Error):
         w = self.win
@@ -183,6 +213,7 @@ class ReconController:
         w.statusBar().showMessage(e.message.splitlines()[0] if e.message else "Error",
                                   8000)
         w.progress.setValue(0)
+        w.lbl_progress.setText("error")
         self._update_buttons()
 
     # ── status ───────────────────────────────────────────────────────────
@@ -214,6 +245,7 @@ class ReconController:
             w.btn_start.setToolTip("")
         w.btn_stop.setEnabled(st == "busy")
         w.btn_save_result.setEnabled(w.state.result is not None)
+        w.btn_save_analysis.setEnabled(w.state.result is not None)
         w.cmb_alg.setEnabled(st != "busy")
 
     # ── saving ───────────────────────────────────────────────────────────

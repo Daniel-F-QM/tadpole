@@ -202,5 +202,24 @@ QPushButton#mode:checked { background-color:$accent; border-color:$accent;
     color:$bg; }
 QLabel#err_g { color:$accent; font-weight:$fw_semibold; font-size:$fs_value;
     font-family:$font_mono; }
+/* The toolbar's stretch: shows the toolbar through, not the window colour. */
+QWidget#spacer { background:transparent; }
+/* windows11 draws a frame round each status-bar item; ours have none. */
+QStatusBar::item { border:none; }
+/* The Propagator's stack list: one compact row per element. */
+QListWidget { background-color:$surface; border:1px solid $border;
+    border-radius:$radius_sm; color:$text; outline:0; }
+QListWidget::item { padding:0px 4px; border:none; height:18px; }
+QListWidget::item:selected { background-color:$accent; color:$bg; }
+QListWidget::item:hover:!selected { background-color:$border_hover; }
 QToolTip { background-color:$surface; color:$text; border:1px solid $border;
     padding:4px; }
+/* The side columns (build_ui._Column, #panel): one notch more compact than
+   the rest of the window, so every page's column fits a maximized window on
+   a 1280×720 screen without scrolling. */
+QWidget#panel QPushButton { padding:2px 10px; }
+QWidget#panel QPushButton#compact, QWidget#panel QPushButton#accentcompact {
+    padding:2px 8px; }
+QWidget#panel QGroupBox { margin-top:9px; padding:2px; }
+QWidget#panel QComboBox, QWidget#panel QDoubleSpinBox, QWidget#panel QSpinBox {
+    min-height:16px; }

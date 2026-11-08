@@ -31,7 +31,9 @@ a = Analysis(
     binaries=[],
     datas=[('icons', 'icons'),
            ('tadpole/design/qss', 'tadpole/design/qss'),
-           (BUNDLE, 'julia_bundle')] + collect_data_files('juliacall'),
+           (BUNDLE, 'julia_bundle')] + collect_data_files('juliacall')
+          # the refractiveindex.info database ships inside the package
+          + collect_data_files('refractiveindex'),
     # The worker is started by multiprocessing ("spawn") and imported by
     # name, so PyInstaller's import scan has to be told about it.
     hiddenimports=['tadpole.engine.julia_worker', 'juliacall'],

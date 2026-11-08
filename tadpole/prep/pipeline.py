@@ -64,7 +64,10 @@ def find_zero(delays: np.ndarray, marginal: np.ndarray, mode: str) -> float:
     raise ValueError(f"unknown zero mode {mode!r}")
 
 
-def prepare(raw: RawTrace, s: PrepSettings) -> tuple[PreparedTrace, PrepReport]:
+def prepare(raw: RawTrace, s: PrepSettings, grid=None) -> tuple[PreparedTrace, PrepReport]:
+    """`grid=(n, dt_fs, w0_rad_fs)` forces the Fourier grid instead of choosing
+    it — to put a second measurement onto an existing pulse's grid (the
+    Propagator's comparison trace)."""
     T, wl, d = background_only(raw, s)
     Tw, w = wavelength_to_frequency(T, wl)
 
@@ -76,14 +79,17 @@ def prepare(raw: RawTrace, s: PrepSettings) -> tuple[PreparedTrace, PrepReport]:
 
     # Centre frequency from the spectral marginal.
     spec = Tw.sum(axis=1)
-    w0 = centroid(w, spec)
+    w0 = centroid(w, spec) if grid is None else float(grid[2])
 
-    n = int(s.grid_n)
+    n = int(s.grid_n) if grid is None else int(grid[0])
     if n < 8 or n % 2:
         raise ValueError(f"grid size must be even and ≥ 8, got {n}")
     d_span = signal_span(d, Tw.sum(axis=0))
     w_span = signal_span(w, spec)
-    dt = float(s.grid_dt_fs) if s.grid_dt_fs > 0 else auto_dt(d_span, w_span, n)
+    if grid is not None:
+        dt = float(grid[1])
+    else:
+        dt = float(s.grid_dt_fs) if s.grid_dt_fs > 0 else auto_dt(d_span, w_span, n)
     dw = 2 * np.pi / (n * dt)
     k = np.arange(n) - n // 2
     tau, wg = k * dt, k * dw
@@ -138,3 +144,24 @@ def prepare(raw: RawTrace, s: PrepSettings) -> tuple[PreparedTrace, PrepReport]:
     report = PrepReport(d_span, w_span, n * dt, 2 * np.pi / dt, shift,
                         energy_inside, asymmetry, warnings)
     return prepared, report
+
+
+def regrid(p: PreparedTrace, n: int, dt_fs: float, w0_rad_fs: float) -> PreparedTrace:
+    """A prepared trace resampled onto another N×N grid (frequency, then
+    delay), peak 1 again. Pixels outside its own grid are masked out."""
+    k = np.arange(n) - n // 2
+    tau, wg = k * dt_fs, k * 2 * np.pi / (n * dt_fs)
+    Tf, in_w = resample_axis(p.w0_rad_fs + p.w_rad_fs, p.trace, w0_rad_fs + wg, axis=0)
+    Tg, in_d = resample_axis(p.t_fs, Tf, tau, axis=1)
+    Mf, _ = resample_axis(p.w0_rad_fs + p.w_rad_fs, p.mask.astype(float),
+                          w0_rad_fs + wg, axis=0)
+    Mg, _ = resample_axis(p.t_fs, Mf, tau, axis=1)
+    mask = (Mg > 0.5) & in_w[:, None] & in_d[None, :]
+    Tg = np.clip(Tg, 0, None)
+    peak = Tg.max()
+    if peak <= 0:
+        raise ValueError("the trace does not overlap the pulse's grid")
+    return PreparedTrace(
+        trace=Tg / peak, mask=mask, dt_fs=float(dt_fs), w0_rad_fs=float(w0_rad_fs),
+        trace_meas=p.trace_meas, mask_meas=p.mask_meas,
+        delays_meas_fs=p.delays_meas_fs, source=p.source, settings=p.settings)

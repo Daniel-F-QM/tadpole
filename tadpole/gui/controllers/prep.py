@@ -29,6 +29,8 @@ class PrepController:
         win.btn_simulate.clicked.connect(self.simulate)
         win.btn_send.clicked.connect(self.send)
         win.btn_save_prep.clicked.connect(self.save_dialog)
+        win.btn_prep_adv.clicked.connect(
+            lambda: win.dlg_prep_adv.show_near(win.btn_prep_adv))
         for cmb in (win.cmb_bg, win.cmb_zero, win.cmb_n):
             cmb.currentIndexChanged.connect(self.schedule)
         for sp in (win.sp_edge_cols, win.sp_edge_rows, win.sp_wl_min, win.sp_wl_max,
@@ -77,8 +79,8 @@ class PrepController:
         w.lbl_file.setText(name)
         wl = raw.wavelengths_nm
         w.lbl_file_info.setText(
-            f"{raw.trace.shape[0]} λ × {raw.trace.shape[1]} delays\n"
-            f"λ {wl.min():.1f} – {wl.max():.1f} nm,  Δτ = {raw.delay_step_fs:.3g} fs")
+            f"{raw.trace.shape[0]} λ × {raw.trace.shape[1]} τ · "
+            f"{wl.min():.0f}–{wl.max():.0f} nm · Δτ {raw.delay_step_fs:.3g} fs")
         w.set_mode(0)
         self.recompute()
 
@@ -99,16 +101,28 @@ class PrepController:
         except ValueError as exc:
             st.prepared, st.report = None, None
             w.lbl_grid.setText("")
-            w.lbl_warn.setText(str(exc))
+            self._warn([str(exc)])
         else:
             p, r = st.prepared, st.report
             w.lbl_grid.setText(
-                f"dt = {p.dt_fs:.3f} fs   dω = {p.dw_rad_fs:.4f} rad/fs\n"
-                f"delay window {r.delay_window_fs:.0f} fs\n"
-                f"signal λ₀ = {p.lambda0_nm:.1f} nm")
-            w.lbl_warn.setText("\n".join("⚠ " + m for m in r.warnings))
+                f"dt {p.dt_fs:.3f} fs · dω {p.dw_rad_fs:.4f}\n"
+                f"window {r.delay_window_fs:.0f} fs · λ₀ {p.lambda0_nm:.1f} nm")
+            self._warn(r.warnings)
         w.prep_canvas.set_data(st.raw, st.processed, st.prepared, st.report)
         self._update_buttons()
+
+    def _warn(self, messages):
+        """The first warning in the panel, all of them in its tooltip: the
+        column has a fixed height, and several wrapped warnings would not fit."""
+        lbl = self.win.lbl_warn
+        messages = list(messages)
+        if not messages:
+            lbl.setText(""); lbl.setToolTip(""); lbl.setVisible(False)
+            return
+        more = f"  (+{len(messages) - 1} more)" if len(messages) > 1 else ""
+        lbl.setText("⚠ " + messages[0] + more)
+        lbl.setToolTip("\n".join("⚠ " + m for m in messages))
+        lbl.setVisible(True)
 
     def _update_buttons(self):
         ok = self.win.state.prepared is not None

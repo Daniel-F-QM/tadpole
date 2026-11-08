@@ -25,6 +25,9 @@ tadpole/
   paths.py                  the only __file__ anchor; where Julia lives
   settings.py               settings.json (Lillypad's mechanism)
   analysis.py               FWHM, spectra, blanked phases (display physics)
+  propagation/              materials.py (refractiveindex.info, the ONLY importer
+                            of `refractiveindex`), physics.py (stack phase,
+                            propagation, numpy SHG model, direction scan)
   juliapkg.json             tells juliapkg to dev julia/TadpoleRetrieval
   design/                   Lillypad's design system: tokens, qss, theme, mpl
   io/                       dwc.py (read/write .dwc), prepared.py (.npz/.csv)
@@ -34,6 +37,8 @@ tadpole/
                             client (EngineClient, polled by the GUI)
   gui/                      widgets, state, canvas/, controllers/, dialogs/,
                             window/ (build_ui + TadpoleWindow)
+    canvas/                 base (styling), interaction (Lillypad's mouse
+                            gestures), prep_canvas, recon_canvas, analysis_canvas
 tests/                      pytest (offscreen GUI, layering, engine end-to-end)
 ```
 
@@ -44,6 +49,42 @@ tests/                      pytest (offscreen GUI, layering, engine end-to-end)
   testable headlessly and reusable from scripts.
 * **Only `engine/julia_worker.py` imports juliacall.** Julia never runs in the
   GUI process.
+
+## GUI
+
+Four pages: Prepare, Reconstruct, Analysis and Propagator. Analysis unlocks
+when a retrieval finishes; the Propagator takes that pulse or a saved one. The control columns have a fixed height and never scroll.
+Explanations are tooltips, and rarely used options sit in each page's
+Advanced… window (`dialogs/advanced.py`). Those widgets keep their usual names
+on the window, so persistence doesn't care where they are shown.
+
+Every plot works like Lillypad's (`canvas/interaction.py`):
+
+* drag to zoom;
+* right-click to return to the automatic view;
+* click an end tick label to type a bound;
+* on a colour bar, drag or scroll to set the range.
+
+Canvases register their panels and colour bars in `redraw()`. User zooms are
+stored per key, so they survive a figure rebuild. Measured and Retrieved share
+their axes and one colour range.
+
+## Propagator
+
+* Sign convention: with the e^{-iωt} kernel, material multiplies Ẽ(ω) by
+  e^{−iφ(ω)}, φ = n(ω)·ω·L/c, so positive GDD delays blue behind red. Pulse
+  GDDs are reported in the same sense (positive = like glass). The constant
+  and the group delay at ω₀ are always removed.
+* Outside a page's tabulated range the index is NaN, never extrapolated.
+  Those frequencies take the cubic Taylor expansion at ω₀, and the panel
+  warns when the pulse spectrum has energy there.
+* The comparison trace is put onto the pulse's own grid: `prepare(raw, s,
+  grid=(n, dt, w0))` for a .dwc and `regrid` for a prepared .npz.
+* `physics.shg_trace` is a numpy copy of Julia's `frog_trace`. An engine test
+  checks they agree, so the Propagator's comparisons and the retrieval use
+  the same model.
+* The direction scan runs on a worker thread (numpy FFTs release the GIL) and
+  is polled. A scan whose inputs have changed is dropped.
 
 ## Data flow
 

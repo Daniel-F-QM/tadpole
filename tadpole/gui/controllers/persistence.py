@@ -61,6 +61,10 @@ class SettingsController:
             ("alpha_min", *num(w.sp_alpha_min)),
             ("alpha_max", *num(w.sp_alpha_max)),
             ("gamma", *num(w.sp_gamma)),
+            ("prop_stack", w.propagator.stack_dicts, w.propagator.set_stack),
+            ("prop_mode", *combo(w.cmb_disp_mode)),
+            ("prop_scan_range", *num(w.sp_scan_range)),
+            ("prop_scan_points", *num(w.sp_scan_points)),
         ]
 
     # ── last directory (file dialogs) ────────────────────────────────────

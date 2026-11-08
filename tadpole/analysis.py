@@ -11,8 +11,16 @@ import numpy as np
 C_NM_PER_FS = 299.792458
 
 
-def t2w(x: np.ndarray) -> np.ndarray:
-    return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x)))
+def t2w(x: np.ndarray, axis: int = 0) -> np.ndarray:
+    """Time → frequency along `axis` (kernel e^{-iωt}), centred both sides."""
+    return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(x, axes=axis), axis=axis),
+                           axes=axis)
+
+
+def w2t(x: np.ndarray, axis: int = 0) -> np.ndarray:
+    """The inverse of `t2w`."""
+    return np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(x, axes=axis), axis=axis),
+                           axes=axis)
 
 
 def fwhm(x: np.ndarray, y: np.ndarray) -> float:
@@ -53,6 +61,18 @@ def visible_range(x: np.ndarray, y: np.ndarray, rel: float = 1e-3, pad: float = 
     lo, hi = float(x[idx[0]]), float(x[idx[-1]])
     span = hi - lo
     return lo - pad * span, hi + pad * span
+
+
+def centred_range(x: np.ndarray, y: np.ndarray, centre: float,
+                  rel: float = 1e-3, pad: float = 0.1):
+    """`visible_range`, made symmetric about `centre`: wide enough for the
+    signal on both sides, so the trace sits in the middle of the view. (Noise
+    above `rel` on one side only would otherwise push it off-centre.) Never
+    wider than the axis `x` itself."""
+    lo, hi = visible_range(x, y, rel, pad)
+    half = max(centre - lo, hi - centre)
+    half = min(half, max(centre - float(np.min(x)), float(np.max(x)) - centre))
+    return centre - half, centre + half
 
 
 def pulse_views(E: np.ndarray, t: np.ndarray, w: np.ndarray, w0_signal: float) -> dict:

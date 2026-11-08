@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -59,3 +60,48 @@ def save_result(path, prepared: PreparedTrace, result: dict) -> None:
         algorithm=str(result.get("algorithm", "")),
         iterations=int(result["iterations"]), stopped=str(result["stopped"]),
         source=prepared.source, prep_settings=json.dumps(prepared.settings))
+
+
+@dataclass
+class PulseSource:
+    """A retrieved pulse on its grid — what the Propagator works on. From the
+    live result (`from_result`) or a saved result .npz (`load_result`)."""
+    E: np.ndarray                # complex field on t_fs
+    t_fs: np.ndarray
+    w_rad_fs: np.ndarray         # frequency OFFSETS of the grid
+    w0_signal_rad_fs: float      # the SHG signal's centre (the pulse's is half)
+    source: str = ""
+
+    @property
+    def n(self) -> int:
+        return int(np.asarray(self.E).size)
+
+    @property
+    def dt_fs(self) -> float:
+        return float(self.t_fs[1] - self.t_fs[0])
+
+    @property
+    def w0_pulse_rad_fs(self) -> float:
+        return self.w0_signal_rad_fs / 2
+
+    @property
+    def grid(self) -> tuple[int, float, float]:
+        """(n, dt, signal ω₀): the grid a comparison trace is prepared onto."""
+        return self.n, self.dt_fs, self.w0_signal_rad_fs
+
+    @classmethod
+    def from_result(cls, prepared: PreparedTrace, result: dict, source="") -> "PulseSource":
+        # The engine sends its grid's t and w; they are the prepared grid's.
+        return cls(np.asarray(result["E"], complex),
+                   np.asarray(result.get("t", prepared.t_fs), float),
+                   np.asarray(result.get("w", prepared.w_rad_fs), float),
+                   float(prepared.w0_rad_fs), source or prepared.source)
+
+
+def load_result(path) -> PulseSource:
+    with np.load(path, allow_pickle=False) as z:
+        if str(z.get("kind", "")) != "tadpole_result":
+            raise ValueError(f"{Path(path).name} is not a Tadpole retrieval result")
+        return PulseSource(np.asarray(z["E"], complex), np.asarray(z["t_fs"], float),
+                           np.asarray(z["w_rad_fs"], float),
+                           2 * float(z["w0_pulse_rad_fs"]), Path(path).name)

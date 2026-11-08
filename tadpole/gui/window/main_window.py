@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QMainWindow
 from tadpole.gui.controllers.appearance import AppearanceController
 from tadpole.gui.controllers.persistence import SettingsController
 from tadpole.gui.controllers.prep import PrepController
+from tadpole.gui.controllers.propagator import PropagatorController
 from tadpole.gui.controllers.recon import ReconController
 from tadpole.gui.dialogs.graphics import GraphicsDialog
 from tadpole.gui.state import AppState
@@ -24,7 +25,8 @@ class TadpoleWindow(QMainWindow):
     def __init__(self, theme: str = "dark", engine=None, start_engine: bool = True):
         super().__init__()
         self.setWindowTitle("Tadpole — FROG reconstruction")
-        self.setMinimumSize(1180, 760)
+        # fits a 1080p screen at 150 % scaling (1280×720 logical)
+        self.setMinimumSize(1000, 600)
         self.state = AppState()
         self.state_last_dir = ""
         self.dlg_graphics = GraphicsDialog(self)
@@ -33,7 +35,10 @@ class TadpoleWindow(QMainWindow):
         self.appearance = AppearanceController(self, theme)
         self.prep = PrepController(self)
         self.recon = ReconController(self, engine)
+        self.propagator = PropagatorController(self)
         self.mode_group.idClicked.connect(self.set_mode)
+        for c in self.canvases():
+            c.message.connect(lambda text: self.statusBar().showMessage(text, 6000))
         self.settings_ctl.restore()
         if start_engine:
             self.recon.start_engine()
@@ -43,8 +48,17 @@ class TadpoleWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
         self.mode_group.button(index).setChecked(True)
 
+    PAGE_NAMES = ("prepare", "reconstruct", "analysis", "propagator")
+
+    def canvases(self):
+        return (self.prep_canvas, self.recon_canvas, self.analysis_canvas,
+                self.propagator_canvas)
+
     def current_canvas(self):
-        return self.prep_canvas if self.stack.currentIndex() == 0 else self.recon_canvas
+        return self.canvases()[self.stack.currentIndex()]
+
+    def current_page_name(self) -> str:
+        return self.PAGE_NAMES[self.stack.currentIndex()]
 
     # ── show / close ─────────────────────────────────────────────────────
     def show_restored(self):
@@ -58,4 +72,5 @@ class TadpoleWindow(QMainWindow):
     def closeEvent(self, event):
         self.settings_ctl.save()
         self.recon.shutdown()
+        self.propagator.shutdown()
         super().closeEvent(event)

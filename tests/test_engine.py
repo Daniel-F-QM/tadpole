@@ -64,3 +64,15 @@ def test_ptychographic_reports_not_implemented(engine):
                    mask=p.mask_meas, delays_fs=p.delays_meas_fs)
     assert isinstance(final, Error) and "not implemented" in final.message
     assert engine.state == "ready"
+
+
+def test_python_trace_model_matches_julia(engine):
+    """The Propagator's numpy SHG model must be Julia's frog_trace exactly,
+    or its comparisons would carry a convention error."""
+    from tadpole.propagation.physics import shg_trace, trace_errors
+    p, _ = prepare(simulate_raw(noise=0.0), PrepSettings(grid_n=64))
+    _, done = run(engine, "pcgpa", p.trace, p.dt_fs, mask=p.mask,
+                  options={"max_iter": 50})
+    assert isinstance(done, Done), done
+    r = done.result
+    assert trace_errors(r["trace"], shg_trace(r["E"]))[1] < 1e-6

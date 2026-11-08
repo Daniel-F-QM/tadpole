@@ -71,6 +71,23 @@ the status-bar text.
 
    The right-hand plots compare the measured marginals with what lands on the grid. Then click **Send to Reconstructor**.
 2. **Reconstruct.** Pick an algorithm and click **Start**. The measured and retrieved traces, the difference between them, E(t), E(ω) and the convergence of **G** and **G′** update while it runs. Then save the result as `.npz` (everything) or `.csv` (the field).
+3. **Analysis.** After a run: the convergence of G and G′, and measured − retrieved.
+4. **Propagator.** Puts the retrieved pulse (or a saved result, **Load…**)
+   through a stack of material and compares the result with a trace measured
+   after that material.
+   - Materials come from [refractiveindex.info](https://refractiveindex.info)
+     (the `refractiveindex` package, whose database is bundled, so no
+     internet access is needed). Type in the Material box to search.
+   - Dispersion: the full n(ω) phase, or only its GDD (+ TOD) at the pulse
+     centre. The stack's GDD and TOD are shown either way.
+   - **Load measured…** takes a `.dwc` (prepared with the Prepare page's
+     settings) or a prepared `.npz`, put onto the pulse's own grid.
+   - SHG FROG cannot tell E(t) from its time-reversed twin E*(−t). After
+     material they differ, and the page reports which one matches the
+     measurement. The **direction scan** plots G against the stack's
+     dispersion times s: a minimum near s = +1 confirms the retrieved
+     direction (and the thickness), near −1 means the pulse is time-reversed.
+     Too little material reads *inconclusive*.
 
 ### Error metrics
 
