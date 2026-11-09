@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from tadpole.analysis import centred_range, pulse_views, visible_range
+from tadpole.analysis import (centred_range, pulse_views, visible_range,
+                              wavelength_axis)
+from tadpole.gui.canvas.base import TWO_PI_C
 from tadpole.design.tokens import INTENSITY_COLOR, PHASE_COLOR
 from tadpole.gui.canvas.base import TadpoleCanvas, trace_cmap, trace_norm
 
@@ -81,7 +83,7 @@ class ReconCanvas(TadpoleCanvas):
         self.style_axes(a_ret, "Retrieved", "τ (fs)", "", grid=False)
         a_ret.tick_params(labelleft=False)
         self.style_axes(a_t, "Temporal", "t (fs)", "I (norm.)")
-        self.style_axes(a_w, "Spectral (fundamental)", "ω (rad/fs)", "")
+        self.style_axes(a_w, "Spectral (fundamental)", "λ (nm)", "")
 
         if p is None:
             for ax in (a_meas, a_ret, a_t, a_w):
@@ -112,7 +114,7 @@ class ReconCanvas(TadpoleCanvas):
         dl = centred_range(t, p.trace.sum(axis=0), 0.0)
         self.set_auto_limits("meas", dl, sl)
         self.set_auto_limits("ret", dl, sl)
-        self._art["g_text"] = self.info_box(a_ret, "")
+        self._art["g_text"] = self.info_box(a_ret, "", corner="upper right")
         self._art["g_text"].set_visible(False)
 
         # temporal / spectral with phase twins
@@ -121,14 +123,13 @@ class ReconCanvas(TadpoleCanvas):
         self.style_twin(a_tp, "φ (rad)", PHASE_COLOR)
         self._art["phi_t"], = a_tp.plot(t, np.full_like(t, np.nan), color=PHASE_COLOR,
                                         lw=1.1, ls="--")
-        wp = p.w0_rad_fs / 2 + p.w_rad_fs
-        self._art["Iw"], = a_w.plot(wp, np.full_like(wp, np.nan), color=INTENSITY_COLOR,
+        lam, _, _ = wavelength_axis(p.w_rad_fs, p.w0_rad_fs)
+        self._art["Iw"], = a_w.plot(lam, np.full_like(lam, np.nan), color=INTENSITY_COLOR,
                                     lw=1.4)
         a_wp = a_w.twinx()
         self.style_twin(a_wp, "φ (rad)", PHASE_COLOR)
-        self._art["phi_w"], = a_wp.plot(wp, np.full_like(wp, np.nan), color=PHASE_COLOR,
+        self._art["phi_w"], = a_wp.plot(lam, np.full_like(lam, np.nan), color=PHASE_COLOR,
                                         lw=1.1, ls="--")
-        self.lambda_secondary(a_w, "x")
         self._axes.update(tp=a_tp, wp=a_wp)
         self._art["t_text"] = self.info_box(a_tp, "")
         self._art["w_text"] = self.info_box(a_wp, "")
@@ -138,8 +139,9 @@ class ReconCanvas(TadpoleCanvas):
         self.register_view("wp", a_wp, parent="w")
         # sensible empty view until a field arrives
         self.set_auto_limits("t", (dl[0] / 2, dl[1] / 2), (0, 1.05))
-        self.set_auto_limits("w", (p.w0_rad_fs / 2 + (sl[0] - p.w0_rad_fs) / 2,
-                                   p.w0_rad_fs / 2 + (sl[1] - p.w0_rad_fs) / 2), (0, 1.05))
+        w_lo = p.w0_rad_fs / 2 + (sl[0] - p.w0_rad_fs) / 2
+        w_hi = p.w0_rad_fs / 2 + (sl[1] - p.w0_rad_fs) / 2
+        self.set_auto_limits("w", (TWO_PI_C / w_hi, TWO_PI_C / max(w_lo, 1e-6)), (0, 1.05))
         self._update_artists()
         self.finish_figure()
 
@@ -157,13 +159,13 @@ class ReconCanvas(TadpoleCanvas):
         if self.E is not None:
             v = pulse_views(self.E, p.t_fs, p.w_rad_fs, p.w0_rad_fs)
             a["It"].set_ydata(v["It"]); a["phi_t"].set_ydata(v["phi_t"])
-            a["Iw"].set_ydata(v["Iw"]); a["phi_w"].set_ydata(v["phi_w"])
+            a["Iw"].set_ydata(v["Il"]); a["phi_w"].set_ydata(v["phi_lam"])
             self.set_auto_limits("t", visible_range(v["t"], v["It"], 1e-3, 0.2))
-            self.set_auto_limits("w", visible_range(v["w"], v["Iw"], 1e-3, 0.2))
+            self.set_auto_limits("w", visible_range(v["lam"], v["Il"], 1e-3, 0.2))
             for key in ("tp", "wp"):
                 if not self.is_manual(key):
                     ax = self._axes[key]
                     ax.relim(); ax.autoscale_view(scalex=False)
             a["t_text"].set_text(f"FWHM {v['fwhm_t']:.1f} fs")
-            a["w_text"].set_text(f"FWHM {v['fwhm_w']:.3f} rad/fs\n"
+            a["w_text"].set_text(f"FWHM {v['fwhm_lam']:.1f} nm\n"
                                  f"λ₀ {v['lambda0_nm']:.0f} nm")

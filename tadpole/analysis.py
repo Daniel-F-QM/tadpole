@@ -75,6 +75,16 @@ def centred_range(x: np.ndarray, y: np.ndarray, centre: float,
     return centre - half, centre + half
 
 
+def wavelength_axis(w: np.ndarray, w0_signal: float):
+    """(λ ascending in nm, mask of grid points with ω > 0, sort order) for the
+    PULSE spectrum on offset grid `w` (carrier w0_signal/2)."""
+    w_abs = w0_signal / 2 + np.asarray(w, float)
+    pos = w_abs > 0
+    lam = 2 * np.pi * C_NM_PER_FS / w_abs[pos]
+    order = np.argsort(lam)
+    return lam[order], pos, order
+
+
 def pulse_views(E: np.ndarray, t: np.ndarray, w: np.ndarray, w0_signal: float) -> dict:
     """Everything the temporal/spectral panels show, from E(t).
 
@@ -83,14 +93,27 @@ def pulse_views(E: np.ndarray, t: np.ndarray, w: np.ndarray, w0_signal: float) -
     """
     E = np.asarray(E)
     It = np.abs(E) ** 2
-    It = It / It.max()
+    peak = It.max()
+    It = It / peak
     Ew = t2w(E)
     Iw = np.abs(Ew) ** 2
     Iw = Iw / Iw.max()
+    phi_w = blanked_phase(Ew)
     w_abs = w0_signal / 2 + np.asarray(w)
+    # The same spectrum against wavelength, as a spectrometer shows it: a
+    # density per nm (Jacobian |dω/dλ| = 2πc/λ² ∝ ω²), ascending λ, only
+    # where ω > 0 has a wavelength.
+    lam, pos, order = wavelength_axis(w, w0_signal)
+    Il = (Iw * w_abs ** 2)[pos][order]
+    Il = Il / Il.max() if Il.size and Il.max() > 0 else Il
+    # Transform limit: the same spectrum with a flat phase. Same energy
+    # (Parseval), so its peak relative to the pulse's is the peak-power gain.
+    It_tl = np.abs(w2t(np.abs(Ew))) ** 2 / peak
     return {
         "t": np.asarray(t), "It": It, "phi_t": blanked_phase(E),
-        "w": w_abs, "Iw": Iw, "phi_w": blanked_phase(Ew),
-        "fwhm_t": fwhm(t, It), "fwhm_w": fwhm(w_abs, Iw),
+        "w": w_abs, "Iw": Iw, "phi_w": phi_w,
+        "lam": lam, "Il": Il, "phi_lam": phi_w[pos][order],
+        "fwhm_t": fwhm(t, It), "fwhm_w": fwhm(w_abs, Iw), "fwhm_lam": fwhm(lam, Il),
+        "It_tl": It_tl, "fwhm_tl": fwhm(t, It_tl), "tl_peak": float(It_tl.max()),
         "lambda0_nm": 2 * np.pi * C_NM_PER_FS / (w0_signal / 2),
     }

@@ -111,23 +111,36 @@ class TadpoleCanvas(InteractionMixin, FigureCanvasQTAgg):
         self._reset_registry()
         self._cells, self._cbar_slots = {}, []
 
-    def grid(self, nrows, ncols, height_ratios=None, width_ratios=None):
+    def grid(self, nrows, ncols, height_ratios=None, width_ratios=None, spans=None,
+             row_widths=None):
         """The figure's panels, as an nrows×ncols array, placed by
-        layout.place rather than by matplotlib."""
+        layout.place rather than by matplotlib. `spans`: {(row, col):
+        (rowspan, colspan)} — that panel covers the cells, which hold None.
+        `row_widths`: {row: [ratios]} — that row has its own columns, as many
+        as ratios (the array is as wide as the widest row; the rest is None)."""
         import numpy as _np
+        row_widths = dict(row_widths or {})
+        width = max([ncols] + [len(v) for v in row_widths.values()])
         self._shape = (nrows, ncols)
         self._ratios = (height_ratios, width_ratios)
-        axs = _np.empty((nrows, ncols), dtype=object)
+        self._row_widths = row_widths
+        spans = spans or {}
+        covered = {(r + i, c + j) for (r, c), (rs, cs) in spans.items()
+                   for i in range(rs) for j in range(cs)} - set(spans)
+        axs = _np.empty((nrows, width), dtype=object)
         for r in range(nrows):
-            for c in range(ncols):
+            for c in range(len(row_widths.get(r, range(ncols)))):
+                if (r, c) in covered:
+                    continue
                 axs[r, c] = self.fig.add_axes([0, 0, 1, 1])
-                self._cells[axs[r, c]] = (r, c)
+                self._cells[axs[r, c]] = (r, c, *spans.get((r, c), (1, 1)))
         return axs
 
     def apply_layout(self):
         if self._cells:
             layout.place(self.fig, self._cells, self._shape, *self._ratios,
-                         cbars=self._cbar_slots)
+                         cbars=self._cbar_slots,
+                         row_widths=getattr(self, "_row_widths", None))
 
     def finish_figure(self):
         self.apply_layout()
@@ -215,12 +228,26 @@ class TadpoleCanvas(InteractionMixin, FigureCanvasQTAgg):
             t.set_color(PALETTE["text"])
         return leg
 
-    def info_box(self, ax, text, loc=(0.02, 0.97), fontsize=BOX_FS):
-        return ax.text(*loc, text, transform=ax.transAxes, va="top", ha="left",
-                       fontsize=fontsize, color=PALETTE["text"], family="monospace",
-                       zorder=10,
-                       bbox=dict(boxstyle="round,pad=0.3", facecolor=PALETTE["surface"],
-                                 edgecolor=PALETTE["border"], alpha=0.85))
+    # Where an info box sits: the axes corner it hangs from, and which way
+    # its offset points (into the axes).
+    _CORNERS = {"upper left": ((0, 1), (1, -1), "left"),
+                "upper right": ((1, 1), (-1, -1), "right"),
+                "upper center": ((0.5, 1), (0, -1), "center")}
+    BOX_INSET = 6.0        # pt from the axes corner to the text, both ways
+
+    def info_box(self, ax, text, corner="upper left", fontsize=BOX_FS):
+        """A small monospace read-out in a corner of `ax`. The inset is in
+        points, not axes fractions, so the box sits equally far from the top
+        and from the side whatever the panel's shape."""
+        xy, (sx, sy), ha = self._CORNERS[corner]
+        return ax.annotate(
+            text, xy=xy, xycoords="axes fraction",
+            xytext=(sx * self.BOX_INSET, sy * self.BOX_INSET),
+            textcoords="offset points", va="top", ha=ha, multialignment="left",
+            fontsize=fontsize,
+            color=PALETTE["text"], family="monospace", zorder=10,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor=PALETTE["surface"],
+                      edgecolor=PALETTE["border"], alpha=0.85))
 
     def empty_message(self, ax, text):
         ax.text(0.5, 0.5, text, transform=ax.transAxes, ha="center", va="center",

@@ -56,7 +56,8 @@ class InteractionMixin:
         """`parent`: for a twin axis, the panel a drag on it zooms. `group`:
         views that share axes and so are zoomed and reset together."""
         assert key not in self._cbars, f"{key!r} is already a colour bar"
-        self._views[key] = dict(ax=ax, home=[None, None], parent=parent, group=group)
+        self._views[key] = dict(ax=ax, home=[None, None], parent=parent, group=group,
+                                explicit=False)
         self._key_of[ax] = key
 
     def register_cbar(self, key, cbar, images):
@@ -72,6 +73,7 @@ class InteractionMixin:
         v = self._views.get(key)
         if v is None:
             return
+        v["explicit"] = True
         if xlim is not None:
             v["home"][0] = tuple(xlim)
         if ylim is not None:
@@ -133,8 +135,8 @@ class InteractionMixin:
             for k in self._members(key):
                 self._manual.pop(k, None)
                 v = self._views[k]
-                if v["parent"] is not None:
-                    v["ax"].relim()
+                if v["parent"] is not None and not v["explicit"]:
+                    v["ax"].relim()          # a twin without its own auto view
                     v["ax"].autoscale_view(scalex=False)
                     continue
                 if v["home"][0] is not None:

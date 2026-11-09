@@ -122,7 +122,7 @@ def test_analysis_page_after_a_result(win, qapp):
     win.recon._on_done(Done(job_id=1, result=_fake_result(win.state.recon_input)))
     assert win.btn_mode_analysis.isEnabled()
     assert win.analysis_canvas.result is not None
-    assert "diff_cbar" in win.analysis_canvas._cbars
+    assert len(win.analysis_canvas._cbars["trace_cbar"]["images"]) == 3   # one bar for all maps
     win.set_mode(2)
     assert win.current_canvas() is win.analysis_canvas
     # new input: the old analysis no longer applies

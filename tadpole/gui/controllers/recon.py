@@ -10,6 +10,7 @@ import os
 import time
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
@@ -124,6 +125,7 @@ class ReconController:
             return
         alg = self.algorithm()
         opts = self.options()
+        self._run_opts = dict(opts)          # shown with the result on Analysis
         self._max_iter = max(1, opts["max_iter"])
         if alg == "ptychographic":
             self.engine.submit(alg, p.trace_meas, p.dt_fs, mask=p.mask_meas,
@@ -187,12 +189,21 @@ class ReconController:
         lines = [f"{r['algorithm'].upper()}, {why}",
                  f"{r['iterations']} iterations, {r['elapsed_s']:.1f} s",
                  f"G  = {r['G']:.3e}", f"G′ = {r['Gp']:.3e}"]
+        errs = np.asarray(r.get("errors", []), float)
+        if errs.size:
+            lines.append(f"best G at iteration {int(np.argmin(errs)) + 1}")
         try:
             v = pulse_views(r["E"], p.t_fs, p.w_rad_fs, p.w0_rad_fs)
-            lines += [f"FWHM {v['fwhm_t']:.1f} fs", f"FWHM {v['fwhm_w']:.3f} rad/fs",
-                      f"λ₀ {v['lambda0_nm']:.0f} nm"]
+            lines += [f"FWHM {v['fwhm_t']:.1f} fs (TL {v['fwhm_tl']:.1f})",
+                      f"FWHM {v['fwhm_lam']:.1f} nm, λ₀ {v['lambda0_nm']:.0f} nm"]
         except (KeyError, ValueError, AttributeError):
             pass
+        o = getattr(self, "_run_opts", None)
+        if o:
+            init = o.get("init", "")
+            seed = f"seed {o.get('seed', 0)}" + ("" if init == "random" else " (unused)")
+            lines += ["", f"init  {init}", seed,
+                      f"max {o.get('max_iter', '')} · tol {o.get('tol', 0):.0e}"]
         w.lbl_analysis.setText("\n".join(lines))
         w.btn_mode_analysis.setEnabled(True)
         w.propagator.set_pulse(PulseSource.from_result(p, r))

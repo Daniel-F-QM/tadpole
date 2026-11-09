@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from tadpole.analysis import blanked_phase, centred_range, pulse_views, t2w
+from tadpole.analysis import centred_range, pulse_views
 from tadpole.design.tokens import (ERROR_COLORS, INTENSITY_COLOR, PALETTE,
                                    PHASE_COLOR, RETRIEVED_COLOR)
 from tadpole.gui.canvas.base import TadpoleCanvas, trace_cmap, trace_norm
@@ -69,7 +69,7 @@ class PropagatorCanvas(TadpoleCanvas):
         for a in (a_rev, a_meas):
             a.tick_params(labelleft=False)
         self.style_axes(a_t, "Temporal", "t (fs)", "I (norm.)")
-        self.style_axes(a_w, "Spectral", "ω (rad/fs)", "")
+        self.style_axes(a_w, "Spectral", "λ (nm)", "")
         self.style_axes(a_s, "Direction scan", "s  (× stack dispersion)", "G")
         if v is None:
             for a in (a_as, a_rev, a_meas, a_t, a_w, a_s):
@@ -101,8 +101,8 @@ class PropagatorCanvas(TadpoleCanvas):
         for key in ("as", "rev", "meas"):
             self.set_auto_limits(key, dl, sl)
         if v.G_as is not None:
-            self.info_box(a_as, f"G {v.G_as:.3e}")
-            self.info_box(a_rev, f"G {v.G_rev:.3e}")
+            self.info_box(a_as, f"G {v.G_as:.3e}", corner="upper right")
+            self.info_box(a_rev, f"G {v.G_rev:.3e}", corner="upper right")
 
         self._draw_temporal(a_t, v)
         self._draw_spectral(a_w, v)
@@ -127,21 +127,19 @@ class PropagatorCanvas(TadpoleCanvas):
 
     def _draw_spectral(self, ax, v):
         p = v.pulse
-        w = p.w0_pulse_rad_fs + p.w_rad_fs
-        Ew0, Ew1 = t2w(p.E), t2w(v.E_as)
-        I = np.abs(Ew0) ** 2
-        I = I / I.max()
-        ax.fill_between(w, I, color=INTENSITY_COLOR, alpha=0.25, lw=0)
-        ax.plot(w, I, color=INTENSITY_COLOR, lw=1.3)
+        before = pulse_views(p.E, p.t_fs, p.w_rad_fs, p.w0_signal_rad_fs)
+        after = pulse_views(v.E_as, p.t_fs, p.w_rad_fs, p.w0_signal_rad_fs)
+        lam, I = before["lam"], before["Il"]
+        ax.fill_between(lam, I, color=INTENSITY_COLOR, alpha=0.25, lw=0)
+        ax.plot(lam, I, color=INTENSITY_COLOR, lw=1.3)
         tw = ax.twinx()
         self.style_twin(tw, "φ (rad)", PHASE_COLOR)
-        tw.plot(w, blanked_phase(Ew0), color=PHASE_COLOR, lw=1.1, ls="--", label="before")
-        tw.plot(w, blanked_phase(Ew1), color=PHASE_COLOR, lw=1.4, label="after")
+        tw.plot(lam, before["phi_lam"], color=PHASE_COLOR, lw=1.1, ls="--", label="before")
+        tw.plot(lam, after["phi_lam"], color=PHASE_COLOR, lw=1.4, label="after")
         self.legend(tw, loc="upper right")
-        self.lambda_secondary(ax, "x")
         self.register_view("w", ax)
         self.register_view("wp", tw, parent="w")
-        lo, hi = centred_range(w, I, p.w0_pulse_rad_fs, 1e-3, 0.2)
+        lo, hi = centred_range(lam, I, before["lambda0_nm"], 1e-3, 0.2)
         self.set_auto_limits("w", (lo, hi), (0, 1.08))
 
     def _draw_scan(self, ax, v):
@@ -164,7 +162,7 @@ class PropagatorCanvas(TadpoleCanvas):
                 color=PALETTE["danger"], fontsize=8)
         ax.text(0.98, 0.97, "as retrieved", transform=ax.transAxes, ha="right",
                 va="top", color=PALETTE["good"], fontsize=8)
-        self.info_box(ax, f"best s = {best:+.2f}", loc=(0.35, 0.97))
+        self.info_box(ax, f"best s = {best:+.2f}", corner="upper center")
         if abs(v.gdd) > 1e-9:
             sec = ax.secondary_xaxis("top", functions=(lambda x: x * v.gdd,
                                                        lambda g: g / v.gdd))
