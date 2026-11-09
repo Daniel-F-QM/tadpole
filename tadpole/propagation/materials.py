@@ -88,6 +88,59 @@ def entry(shelf: str, book: str, page: str) -> CatalogEntry | None:
     return next((e for e in catalog() if e.key == (shelf, book, page)), None)
 
 
+# Which shelves a search shows first: the everyday ones before the exotic.
+SHELF_ORDER = {"main": 0, "popular_glass": 1, "specs": 2, "glass": 3,
+               "organic": 4, "other": 5, "3d": 6}
+# Shelves whose "book" is a catalogue and whose pages are the glasses
+# (specs/SCHOTT-optical/N-BK7): the page is the name people type.
+_CATALOGUE_SHELVES = {"specs"}
+
+
+def search_label(e: CatalogEntry) -> str:
+    """One line per data set, name first: "SiO2 — Malitson 1965: n 0.21–6.7 µm",
+    "N-BK7 — SCHOTT - Optical glass · specs"."""
+    if e.shelf in _CATALOGUE_SHELVES:
+        text = f"{e.page} — {e.book_name or e.book}"
+    else:
+        text = f"{e.book} — {e.page_name or e.page}"
+    return text if e.shelf == "main" else f"{text} · {e.shelf}"
+
+
+def _k_only(page_name: str) -> bool:
+    """Data sets that hold only the extinction coefficient k ("… 2017: Water;
+    k 1.2–1.9 µm") — no n, so no dispersion. Judged from the name, which
+    the database writes as "<source>: <what>; <quantity> <range>"."""
+    if ":" not in page_name:
+        return False
+    starts = [p.strip().split(" ")[0] for p in page_name.split(":", 1)[1].split(";")]
+    return "k" in starts and not any(s.startswith("n") for s in starts)
+
+
+def search(query: str, limit: int = 40) -> list[CatalogEntry]:
+    """Data sets with a refractive index matching every word of `query`
+    (case-insensitive, anywhere in the material's id, name, data set or
+    shelf). Order: exact names, then common shelves before exotic ones, then
+    names starting with the first word, then the database's order."""
+    words = query.lower().split()
+    if not words:
+        return []
+    first = words[0]
+    hits = []
+    for i, e in enumerate(catalog()):
+        hay = f"{e.book} {e.page} {e.book_name} {e.page_name} {e.shelf}".lower()
+        if not all(w in hay for w in words) or _k_only(e.page_name):
+            continue
+        names = (e.book.lower(), e.page.lower())
+        exact = 0 if first in names else 1
+        prefix = 0 if any(n.startswith(first) for n in names) else 1
+        # the "3d" shelf (pages named after the material, for 3-D rendering)
+        # would otherwise win every exact match against the real entries
+        last = 1 if e.shelf == "3d" else 0
+        hits.append((last, exact, SHELF_ORDER.get(e.shelf, 9), prefix, i, e))
+    hits.sort(key=lambda h: h[:5])
+    return [h[5] for h in hits[:limit]]
+
+
 @lru_cache(maxsize=256)
 def _material(shelf: str, book: str, page: str):
     with _lock:

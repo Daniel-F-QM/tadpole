@@ -304,3 +304,29 @@ def test_plots_do_not_move_when_numbers_change(win, qapp):
     ctl.set_stack([{"shelf": "main", "book": "SiO2", "page": "Malitson", "thickness_mm": 25.0}])
     ctl.recompute()
     assert positions(pc) == before
+
+
+def test_material_search_box(win, qapp):
+    """Typing in the Material box searches all data sets; a pick sets the
+    element's material AND data set; Return takes the best match."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    ctl = win.propagator
+    ctl.wait_ready()
+    win.set_mode(3)
+    qapp.processEvents()
+    le = win.cmb_material.lineEdit()
+    QTest.mouseClick(le, Qt.LeftButton)
+    QTest.keyClicks(le, "n-bk7")
+    assert le.text() == "n-bk7"                       # replaced the name, not inserted
+    assert ctl._search_model.stringList()[0].startswith("N-BK7")
+    ctl._search_chosen(ctl._search_model.stringList()[0])
+    e = ctl._current()
+    assert (e.book, e.page) == ("SCHOTT-optical", "N-BK7")
+    assert win.cmb_page.currentData() == "N-BK7"
+    assert "N-BK7" in win.list_stack.currentItem().text()
+    QTest.qWait(20)
+    QTest.mouseClick(le, Qt.LeftButton)
+    QTest.keyClicks(le, "caf2 li")
+    QTest.keyClick(le, Qt.Key_Return)
+    assert (ctl._current().book, ctl._current().page) == ("CaF2", "Li")

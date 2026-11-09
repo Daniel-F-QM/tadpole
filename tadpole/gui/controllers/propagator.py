@@ -14,7 +14,7 @@ import concurrent.futures as cf
 from pathlib import Path
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QStringListModel, Qt, QTimer
 from PySide6.QtWidgets import QCompleter, QFileDialog, QMessageBox
 
 from tadpole.analysis import pulse_views, t2w
@@ -31,6 +31,30 @@ from tadpole.propagation.physics import (MODES, best_s, propagate,
 DEBOUNCE_MS = 150
 POLL_MS = 50
 COVERAGE_WARN = 1e-3      # spectral energy outside a page's data that warns
+
+
+SEARCH_POPUP_W = 420     # the result list is wider than the panel's box
+
+
+class _SearchStart(QObject):
+    """Typing into the material box starts a fresh search: while the box still
+    shows the current material's name, the first typed character replaces it
+    (wherever the cursor is), and focusing the box selects the name."""
+    def __init__(self, combo):
+        super().__init__(combo)
+        self._combo = combo
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.FocusIn:
+            QTimer.singleShot(0, obj.selectAll)
+        elif event.type() == QEvent.KeyPress:
+            ch = event.text()
+            # itemText, not currentText: an editable combo's currentText IS
+            # whatever has been typed
+            shown = self._combo.itemText(self._combo.currentIndex())
+            if ch and ch.isprintable() and shown and obj.text() == shown:
+                obj.clear()
+        return False
 
 
 def _item_text(i, e) -> str:
@@ -120,12 +144,26 @@ class PropagatorController:
             cmb.addItem(label, f"{shelf}/{book}")
         cmb.setCurrentIndex(-1)
         cmb.blockSignals(False)
-        comp = QCompleter(cmb.model(), cmb)
-        comp.setFilterMode(Qt.MatchContains)
+        # Typing in the box searches every data set (materials.search); the
+        # results list is rebuilt per keystroke and shown as is. The completer
+        # goes on the LINE EDIT, not the combo box: QComboBox would map a
+        # chosen row of this list onto its own rows (another material).
+        self._hits = {}
+        self._search_model = QStringListModel(cmb)
+        comp = QCompleter(self._search_model, cmb)
+        comp.setCompletionMode(QCompleter.UnfilteredPopupCompletion)
         comp.setCaseSensitivity(Qt.CaseInsensitive)
-        comp.setCompletionMode(QCompleter.PopupCompletion)
-        comp.activated[str].connect(self._material_typed)
-        cmb.setCompleter(comp)
+        comp.setMaxVisibleItems(14)
+        comp.popup().setMinimumWidth(SEARCH_POPUP_W)
+        comp.activated[str].connect(self._search_chosen)
+        le = cmb.lineEdit()
+        le.setCompleter(comp)
+        le.setPlaceholderText("search material…")
+        le.textEdited.connect(self._search_typed)
+        le.returnPressed.connect(self._search_return)
+        self._search_start = _SearchStart(cmb)
+        le.installEventFilter(self._search_start)
+        self._completer = comp
         cmb.setEnabled(True)
         w.cmb_page.setEnabled(True)
         self._row_selected(w.list_stack.currentRow())
@@ -194,11 +232,47 @@ class PropagatorController:
         cmb.setCurrentIndex(max(cmb.findData(e.page), 0))
         cmb.blockSignals(False)
 
-    def _material_typed(self, text):
-        i = self.win.cmb_material.findText(text)
-        if i >= 0:
-            self.win.cmb_material.setCurrentIndex(i)
-            self._material_chosen(i)
+    # ── search ───────────────────────────────────────────────────────────
+    def _search_typed(self, text):
+        hits = M.search(text)
+        labels, self._hits = [], {}
+        for e in hits:
+            label = M.search_label(e)
+            if label in self._hits:                  # same name and data set name
+                label = f"{label} [{e.page}]"
+            self._hits[label] = e
+            labels.append(label)
+        self._search_model.setStringList(labels)
+        if labels:
+            self._completer.complete()
+        else:
+            self._completer.popup().hide()
+
+    def _search_return(self):
+        """Return without picking from the list: take the best match."""
+        labels = self._search_model.stringList()
+        if labels and self.win.cmb_material.lineEdit().text() not in self._hits:
+            self._search_chosen(labels[0])
+
+    def _search_chosen(self, label):
+        hit = self._hits.get(label)
+        e = self._current()
+        if hit is None or e is None:
+            return
+        e.shelf, e.book, e.page = hit.shelf, hit.book, hit.page
+        w = self.win
+        w.cmb_material.blockSignals(True)
+        w.cmb_material.setCurrentIndex(w.cmb_material.findData(f"{e.shelf}/{e.book}"))
+        w.cmb_material.blockSignals(False)
+        # after the completer has written the label into the box
+        QTimer.singleShot(0, self._show_current_material)
+        self._fill_pages(e)
+        self._element_changed()
+
+    def _show_current_material(self):
+        cmb = self.win.cmb_material
+        cmb.lineEdit().setText(cmb.itemText(cmb.currentIndex()))
+        cmb.lineEdit().setCursorPosition(0)
 
     def _material_chosen(self, index):
         e = self._current()

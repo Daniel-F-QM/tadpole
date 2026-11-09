@@ -204,8 +204,13 @@ def build_prep_page(win) -> QWidget:
     win.lbl_file = ElidedLabel("No trace loaded")
     win.lbl_file_info = ElidedLabel("")
     win.lbl_file_info.setObjectName("dim")
+    win.lbl_file_info.setVisible(False)        # until a trace is loaded
+    win.btn_file_open = QPushButton("Open trace (.dwc)…")
+    win.btn_file_open.setObjectName("accentcompact")
+    win.btn_file_open.setToolTip("Open a FROG trace recorded by Lillypad")
     v.addWidget(win.lbl_file)
     v.addWidget(win.lbl_file_info)
+    v.addWidget(win.btn_file_open)
 
     # Background
     g_bg = QGroupBox("Background")
@@ -458,8 +463,9 @@ def build_propagator_page(win) -> QWidget:
     win.cmb_material = ComboBox()
     win.cmb_material.setEditable(True)
     win.cmb_material.setInsertPolicy(QComboBox.NoInsert)
-    win.cmb_material.setToolTip("Type to search refractiveindex.info "
-                                "(e.g. SiO2, BK7, CaF2, sapphire)")
+    win.cmb_material.setToolTip("Type to search refractiveindex.info: material, "
+                                "glass or data set, several words narrow it down "
+                                "(e.g. SiO2, N-BK7, sapphire, CaF2 li)")
     win.cmb_page = ComboBox()
     win.cmb_page.setToolTip("The data set (author, year, wavelength range)")
     win.sp_thickness = DoubleSpinBox()

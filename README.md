@@ -1,3 +1,5 @@
+<p align="center"><img src="icons/Tadpole.png" alt="Tadpole" width="160"></p>
+
 # Tadpole
 
 Tadpole prepares SHG FROG traces and reconstructs the pulse from them. It is the companion to

@@ -26,6 +26,7 @@ class PrepController:
         self._timer.timeout.connect(self.recompute)
 
         win.btn_open.clicked.connect(self.open_dialog)
+        win.btn_file_open.clicked.connect(self.open_dialog)
         win.btn_simulate.clicked.connect(self.simulate)
         win.btn_send.clicked.connect(self.send)
         win.btn_save_prep.clicked.connect(self.save_dialog)
@@ -78,6 +79,7 @@ class PrepController:
         name = Path(raw.source).name if raw.source != "simulated" else "Simulated trace"
         w.lbl_file.setText(name)
         wl = raw.wavelengths_nm
+        w.lbl_file_info.setVisible(True)
         w.lbl_file_info.setText(
             f"{raw.trace.shape[0]} λ × {raw.trace.shape[1]} τ · "
             f"{wl.min():.0f}–{wl.max():.0f} nm · Δτ {raw.delay_step_fs:.3g} fs")

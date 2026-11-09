@@ -147,3 +147,18 @@ def test_measured_trace_lands_on_the_pulse_grid():
     rg = regrid(other, *g)
     assert rg.trace.shape == (128, 128) and rg.w0_rad_fs == before.w0_rad_fs
     assert trace_errors(after.trace, rg.trace, after.mask & rg.mask)[1] < 0.05
+
+
+def test_material_search():
+    """Every word must match; exact names first; glasses are found by the
+    glass name even though they are data sets of a catalogue; data sets with
+    only k (no dispersion) are left out."""
+    first = M.search("n-bk7")[0]
+    assert (first.shelf, first.book, first.page) == ("specs", "SCHOTT-optical", "N-BK7")
+    hits = M.search("sio2 malitson")
+    assert hits and hits[0].key == ("main", "SiO2", "Malitson")
+    assert all("sio2" in f"{e.book} {e.book_name}".lower() for e in M.search("sio2 mal"))
+    assert M.search("sapph")[0].book == "Al2O3"
+    assert M.search("water")[0].shelf == "main"           # the 3d shelf comes last
+    assert not any(M._k_only(e.page_name) for e in M.search("water"))
+    assert M.search("") == [] and M.search("no such material xyz") == []

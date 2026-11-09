@@ -16,8 +16,9 @@ from PySide6.QtGui import QIcon
 
 from tadpole.paths import resource_path
 
-# No Tadpole artwork yet: the window icon falls back to Qt's default until
-# icons/Tadpole.ico exists.
+# The application icon: Tadpole.ico (16–256 px, window + taskbar + the exe,
+# see Tadpole.spec) and Tadpole.png (512 px, also the README logo). Both are
+# made from the same artwork.
 ICON_ICO_PATH = resource_path("icons", "Tadpole.ico")
 ICON_PATH     = resource_path("icons", "Tadpole.png")
 SUN_ICON      = resource_path("icons", "sun.png")
