@@ -39,21 +39,37 @@ SEARCH_POPUP_W = 420     # the result list is wider than the panel's box
 class _SearchStart(QObject):
     """Typing into the material box starts a fresh search: while the box still
     shows the current material's name, the first typed character replaces it
-    (wherever the cursor is), and focusing the box selects the name."""
-    def __init__(self, combo):
+    (wherever the cursor is), and focusing the box selects the name. Leaving
+    the box calls `on_leave` (a search typed but not picked is not dropped).
+
+    Installed on the COMBO BOX (and its line edit): the keyboard focus is the
+    combo's, which hands focus and key events to its line edit by calling
+    event() directly — past any filter on the line edit."""
+    def __init__(self, combo, on_leave):
         super().__init__(combo)
         self._combo = combo
+        self._le = combo.lineEdit()
+        self._on_leave = on_leave
+        combo.installEventFilter(self)
+        self._le.installEventFilter(self)       # events sent to it directly
 
     def eventFilter(self, obj, event):
-        if event.type() == QEvent.FocusIn:
-            QTimer.singleShot(0, obj.selectAll)
-        elif event.type() == QEvent.KeyPress:
+        t = event.type()
+        if t == QEvent.FocusIn and obj is self._combo:
+            if event.reason() != Qt.PopupFocusReason:     # back from a list
+                QTimer.singleShot(0, self._le.selectAll)
+        elif t == QEvent.FocusOut and obj is self._combo:
+            # not for the result list or the combo's own list (popups), nor
+            # for switching to another window: the user is still searching
+            if event.reason() not in (Qt.PopupFocusReason, Qt.ActiveWindowFocusReason):
+                self._on_leave()
+        elif t == QEvent.KeyPress:
             ch = event.text()
             # itemText, not currentText: an editable combo's currentText IS
             # whatever has been typed
             shown = self._combo.itemText(self._combo.currentIndex())
-            if ch and ch.isprintable() and shown and obj.text() == shown:
-                obj.clear()
+            if ch and ch.isprintable() and shown and self._le.text() == shown:
+                self._le.clear()
         return False
 
 
@@ -161,8 +177,7 @@ class PropagatorController:
         le.setPlaceholderText("search material…")
         le.textEdited.connect(self._search_typed)
         le.returnPressed.connect(self._search_return)
-        self._search_start = _SearchStart(cmb)
-        le.installEventFilter(self._search_start)
+        self._search_start = _SearchStart(cmb, self._search_leave)
         self._completer = comp
         cmb.setEnabled(True)
         w.cmb_page.setEnabled(True)
@@ -216,6 +231,8 @@ class PropagatorController:
             if self._ready:
                 i = w.cmb_material.findData(f"{e.shelf}/{e.book}")
                 w.cmb_material.setCurrentIndex(i)
+                # also when the index did not change: drop a half-typed search
+                w.cmb_material.lineEdit().setText(w.cmb_material.itemText(i))
                 w.cmb_material.lineEdit().setCursorPosition(0)   # show the start
                 self._fill_pages(e)
         for wd in (w.cmb_material, w.cmb_page, w.sp_thickness):
@@ -248,16 +265,41 @@ class PropagatorController:
         else:
             self._completer.popup().hide()
 
+    def _pending_hit(self) -> M.CatalogEntry | None:
+        """The best match of a search typed into the box but not picked yet."""
+        if not self._ready:
+            return None
+        cmb = self.win.cmb_material
+        text = cmb.lineEdit().text()
+        labels = self._search_model.stringList()
+        if (not text.strip() or text == cmb.itemText(cmb.currentIndex())
+                or text in self._hits or not labels):
+            return None
+        return self._hits.get(labels[0])
+
     def _search_return(self):
         """Return without picking from the list: take the best match."""
-        labels = self._search_model.stringList()
-        if labels and self.win.cmb_material.lineEdit().text() not in self._hits:
-            self._search_chosen(labels[0])
+        if self._pending_hit() is not None:
+            self._search_chosen(self._search_model.stringList()[0])
+
+    def _search_leave(self):
+        """Clicking elsewhere after typing a search applies its best match (as
+        Return does); a search with no match goes back to the material."""
+        if self._pending_hit() is not None:
+            self._search_chosen(self._search_model.stringList()[0])
+        elif self._ready:
+            self._completer.popup().hide()
+            self._show_current_material()
 
     def _search_chosen(self, label):
         hit = self._hits.get(label)
+        if hit is None:
+            return
         e = self._current()
-        if hit is None or e is None:
+        if e is None:                                # empty stack: start one
+            self.stack.append(M.Element(hit.shelf, hit.book, hit.page, 1.0))
+            self._refresh_list(select=0)
+            self.schedule()
             return
         e.shelf, e.book, e.page = hit.shelf, hit.book, hit.page
         w = self.win
@@ -320,8 +362,16 @@ class PropagatorController:
         self.schedule()
 
     def add_element(self):
-        cur = self._current()
-        e = M.Element(cur.shelf, cur.book, cur.page, 1.0) if cur else M.Element()
+        """A new element of the material typed into the box (not picked yet),
+        else a copy of the selected element's material."""
+        hit, cur = self._pending_hit(), self._current()
+        if hit is not None:
+            e = M.Element(hit.shelf, hit.book, hit.page, 1.0)
+            self._completer.popup().hide()
+        elif cur is not None:
+            e = M.Element(cur.shelf, cur.book, cur.page, 1.0)
+        else:
+            e = M.Element()
         self.stack.append(e)
         self._refresh_list(select=len(self.stack) - 1)
         self.schedule()

@@ -308,25 +308,59 @@ def test_plots_do_not_move_when_numbers_change(win, qapp):
 
 def test_material_search_box(win, qapp):
     """Typing in the Material box searches all data sets; a pick sets the
-    element's material AND data set; Return takes the best match."""
+    element's material AND data set; Return or clicking elsewhere takes the
+    best match; Add adds the typed material.
+
+    Keys go to the COMBO BOX, as from a real keyboard: it holds the focus and
+    hands keys to its line edit past any filter on the line edit (which is
+    how typing used to land inside "SiO2 (Silicon dioxide, …)" and match
+    nothing)."""
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
     ctl = win.propagator
     ctl.wait_ready()
     win.set_mode(3)
     qapp.processEvents()
-    le = win.cmb_material.lineEdit()
-    QTest.mouseClick(le, Qt.LeftButton)
-    QTest.keyClicks(le, "n-bk7")
-    assert le.text() == "n-bk7"                       # replaced the name, not inserted
+    cmb, le = win.cmb_material, win.cmb_material.lineEdit()
+
+    def type_in(text):
+        win.activateWindow()
+        QTest.qWaitForWindowActive(win)
+        QTest.mouseClick(le, Qt.LeftButton, pos=le.rect().center())
+        QTest.qWait(20)
+        assert qapp.focusWidget() is cmb
+        QTest.keyClicks(cmb, text)
+        assert le.text() == text                      # replaced the name, not inserted
+
+    def book_page(e):
+        return e.book, e.page
+
+    type_in("n-bk7")
     assert ctl._search_model.stringList()[0].startswith("N-BK7")
     ctl._search_chosen(ctl._search_model.stringList()[0])
-    e = ctl._current()
-    assert (e.book, e.page) == ("SCHOTT-optical", "N-BK7")
+    assert book_page(ctl._current()) == ("SCHOTT-optical", "N-BK7")
     assert win.cmb_page.currentData() == "N-BK7"
     assert "N-BK7" in win.list_stack.currentItem().text()
     QTest.qWait(20)
-    QTest.mouseClick(le, Qt.LeftButton)
-    QTest.keyClicks(le, "caf2 li")
-    QTest.keyClick(le, Qt.Key_Return)
-    assert (ctl._current().book, ctl._current().page) == ("CaF2", "Li")
+
+    type_in("caf2 li")
+    QTest.keyClick(cmb, Qt.Key_Return)
+    assert book_page(ctl._current()) == ("CaF2", "Li")
+    QTest.qWait(20)
+
+    # typed, then Add: a new element of the typed material, the selected kept
+    type_in("sapph")
+    QTest.mouseClick(win.btn_stack_add, Qt.LeftButton)
+    assert [book_page(e) for e in ctl.stack] == [("CaF2", "Li"), ("Al2O3", "Malitson-o")]
+    assert ctl._current() is ctl.stack[1]
+
+    # typed, then clicked elsewhere: applied; nothing found: the box reverts
+    for text, expect in (("znse", "ZnSe"), ("zzzq", "ZnSe")):
+        type_in(text)
+        ctl._completer.popup().hide()
+        win.activateWindow()
+        QTest.qWaitForWindowActive(win)
+        win.sp_thickness.setFocus(Qt.MouseFocusReason)
+        QTest.qWait(20)
+        assert ctl._current().book == expect
+        assert le.text() == cmb.itemText(cmb.currentIndex())

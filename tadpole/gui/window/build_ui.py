@@ -460,6 +460,11 @@ def build_propagator_page(win) -> QWidget:
     win.btn_stack_remove = QPushButton("Remove")
     for b in (win.btn_stack_add, win.btn_stack_remove):
         b.setObjectName("compact")
+    win.btn_stack_add.setToolTip("Add an element: the material typed in the box, "
+                                 "or a copy of the selected one")
+    # no focus: a click must not take it from the material box first, which
+    # would apply a typed search to the selected element (propagator.py)
+    win.btn_stack_add.setFocusPolicy(Qt.NoFocus)
     win.cmb_material = ComboBox()
     win.cmb_material.setEditable(True)
     win.cmb_material.setInsertPolicy(QComboBox.NoInsert)
