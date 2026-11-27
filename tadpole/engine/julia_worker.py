@@ -31,8 +31,11 @@ from tadpole.engine.protocol import (Done, Error, Log, Quit, Ready, Snapshot,
 # The Python modules PythonCall imports while it initialises. In a frozen exe
 # PyInstaller only bundles what it saw imported, and a missing one kills the
 # worker inside Julia's start-up with an opaque InitError, so check them first.
-PYTHONCALL_IMPORTS = ("sys", "io", "inspect", "traceback", "numbers",
-                      "collections", "collections.abc", "juliacall", "numpy")
+# PythonCall's Core.__init__ (src/Core/consts.jl) imports builtins, sys, os,
+# numbers, datetime, collections.abc and fractions; the rest come later.
+PYTHONCALL_IMPORTS = ("builtins", "sys", "os", "io", "inspect", "traceback",
+                      "numbers", "datetime", "fractions", "collections",
+                      "collections.abc", "juliacall", "numpy")
 
 
 def _check_python_imports() -> None:
@@ -47,9 +50,26 @@ def _check_python_imports() -> None:
         raise ImportError("modules PythonCall needs are missing: " + "; ".join(missing))
 
 
+def _ensure_builtins_help() -> None:
+    """A frozen exe never runs `site`, so builtins.help does not exist.
+    PythonCall 0.9.37 falls back to None for it, but that fallback reads its
+    own pybuiltins.None/AttributeError, which may not be initialised yet
+    (they are filled in hash-set order). It then dies inside Julia's start-up
+    with InitError(mod=:Core, AttributeError). Define help, as `site` would."""
+    import builtins
+    if hasattr(builtins, "help"):
+        return
+    try:
+        from _sitebuiltins import _Helper
+        builtins.help = _Helper()
+    except Exception:                     # noqa: BLE001 - any value will do
+        builtins.help = None
+
+
 def _boot_julia():
     from tadpole.paths import julia_environment
     os.environ.update(julia_environment())
+    _ensure_builtins_help()
     _check_python_imports()
     from juliacall import Main as jl        # noqa: E402  (env must be set first)
     jl.seval("using TadpoleRetrieval, PythonCall")

@@ -86,11 +86,20 @@ def _bundle_environment(bundle: Path) -> dict[str, str]:
     nothing is resolved or downloaded. The depot path lists a WRITABLE user
     depot first (anything Julia has to (re)compile lands there) and the
     read-only bundled depot second.
+
+    LIB and BINDIR are named too: without them juliacall runs julia.exe once
+    just to look them up, and from the windowless exe that subprocess pops up
+    a console window.
     """
     user = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Tadpole" / "julia_depot"
-    exe = bundle / "runtime" / "bin" / ("julia.exe" if os.name == "nt" else "julia")
+    bindir = bundle / "runtime" / "bin"
+    if os.name == "nt":
+        exe, lib = bindir / "julia.exe", bindir / "libjulia.dll"
+    else:
+        exe, lib = bindir / "julia", bundle / "runtime" / "lib" / "libjulia.so"
     env = {
         "PYTHON_JULIACALL_EXE": str(exe),
+        "PYTHON_JULIACALL_BINDIR": str(bindir),
         "PYTHON_JULIACALL_PROJECT": str(bundle / "env"),
         "JULIA_DEPOT_PATH": os.pathsep.join([str(user), str(bundle / "depot")]),
         "JULIA_PKG_OFFLINE": "true",
@@ -98,6 +107,8 @@ def _bundle_environment(bundle: Path) -> dict[str, str]:
         "PYTHON_JULIACALL_HANDLE_SIGNALS": "yes",
         "PYTHON_JULIACALL_THREADS": "1",
     }
+    if lib.exists():
+        env["PYTHON_JULIACALL_LIB"] = str(lib)
     sysimage = bundle / "sysimage" / JULIA_SYSIMAGE.name
     if sysimage.exists():
         env["PYTHON_JULIACALL_SYSIMAGE"] = str(sysimage)
